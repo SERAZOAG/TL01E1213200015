@@ -204,8 +204,13 @@ public class ActivityList extends AppCompatActivity {
             return;
         }
 
-        Intent intent = new Intent(this, ActivityActualizar.class);
+        Intent intent = new Intent(this, MainActivity.class);
         intent.putExtra("id", contactoSeleccionado.getId());
+        intent.putExtra("pais", contactoSeleccionado.getPais());
+        intent.putExtra("nombre", contactoSeleccionado.getNombre());
+        intent.putExtra("telefono", contactoSeleccionado.getTelefono());
+        intent.putExtra("nota", contactoSeleccionado.getNota());
+        intent.putExtra("imagen", contactoSeleccionado.getImagen());
         startActivity(intent);
     }
 

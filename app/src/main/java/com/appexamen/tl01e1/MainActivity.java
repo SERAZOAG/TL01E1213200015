@@ -6,9 +6,9 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.provider.MediaStore;
-import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -38,6 +38,7 @@ public class MainActivity extends AppCompatActivity {
     EditText editTextNombre, editTextTelefono, editTextNota;
     Button btnSalvarContacto, btnContactosSalvados;
     Bitmap imageBitmap;
+    int contactIdToUpdate = -1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -59,11 +60,37 @@ public class MainActivity extends AppCompatActivity {
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinnerPais.setAdapter(adapter);
 
+        Intent intent = getIntent();
+        if (intent.hasExtra("id")) {
+            contactIdToUpdate = intent.getIntExtra("id", -1);
+            String pais = intent.getStringExtra("pais");
+            String nombre = intent.getStringExtra("nombre");
+            String telefono = intent.getStringExtra("telefono");
+            String nota = intent.getStringExtra("nota");
+            byte[] imagenBytes = intent.getByteArrayExtra("imagen");
+
+            editTextNombre.setText(nombre);
+            editTextTelefono.setText(telefono);
+            editTextNota.setText(nota);
+
+            if (pais != null) {
+                int spinnerPosition = adapter.getPosition(pais);
+                spinnerPais.setSelection(spinnerPosition);
+            }
+
+            if (imagenBytes != null) {
+                imageBitmap = BitmapFactory.decodeByteArray(imagenBytes, 0, imagenBytes.length);
+                imageViewFoto.setImageBitmap(imageBitmap);
+            }
+
+            btnSalvarContacto.setText("Actualizar Contacto");
+        }
+
         btnSalvarContacto.setOnClickListener(v -> salvarContacto());
 
         btnContactosSalvados.setOnClickListener(v -> {
-            Intent intent = new Intent(MainActivity.this, ActivityList.class);
-            startActivity(intent);
+            Intent intentList = new Intent(MainActivity.this, ActivityList.class);
+            startActivity(intentList);
         });
     }
 
@@ -139,18 +166,27 @@ public class MainActivity extends AppCompatActivity {
                 valores.put(Transacciones.COLUMNA_IMAGEN, stream.toByteArray());
             }
 
-            long resultado = db.insert(Transacciones.TABLA_CONTACTOS, null, valores);
-
-            if (resultado != -1) {
-                Toast.makeText(this, "Contacto salvado exitosamente", Toast.LENGTH_SHORT).show();
-                limpiarCampos();
+            if (contactIdToUpdate != -1) {
+                int rowsAffected = db.update(Transacciones.TABLA_CONTACTOS, valores, Transacciones.COLUMNA_ID + "=?", new String[]{String.valueOf(contactIdToUpdate)});
+                if (rowsAffected > 0) {
+                    Toast.makeText(this, "Contacto actualizado exitosamente", Toast.LENGTH_SHORT).show();
+                    finish(); // Regresa a la lista de contactos
+                } else {
+                    Toast.makeText(this, "Error al actualizar el contacto", Toast.LENGTH_SHORT).show();
+                }
             } else {
-                Toast.makeText(this, "Error al salvar el contacto", Toast.LENGTH_SHORT).show();
+                long resultado = db.insert(Transacciones.TABLA_CONTACTOS, null, valores);
+                if (resultado != -1) {
+                    Toast.makeText(this, "Contacto salvado exitosamente", Toast.LENGTH_SHORT).show();
+                    limpiarCampos();
+                } else {
+                    Toast.makeText(this, "Error al salvar el contacto", Toast.LENGTH_SHORT).show();
+                }
             }
 
             db.close();
         } catch (Exception e) {
-            Toast.makeText(this, "Error al salvar el contacto: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
 
