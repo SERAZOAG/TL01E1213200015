@@ -72,7 +72,13 @@ public class ActivityList extends AppCompatActivity {
 
         listViewContactos.setOnItemClickListener((parent, view, position, id) -> {
             contactoSeleccionado = (Contacto) parent.getItemAtPosition(position);
+            Toast.makeText(this, "Contacto " + contactoSeleccionado.getNombre() + " seleccionado", Toast.LENGTH_SHORT).show();
+        });
+
+        listViewContactos.setOnItemLongClickListener((parent, view, position, id) -> {
+            contactoSeleccionado = (Contacto) parent.getItemAtPosition(position);
             mostrarDialogoLlamada();
+            return true;
         });
 
         btnCompartir.setOnClickListener(v -> compartirContacto());
