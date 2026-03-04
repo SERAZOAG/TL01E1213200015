@@ -7,6 +7,7 @@ import android.content.pm.PackageManager;
 import android.database.sqlite.SQLiteDatabase;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.widget.ArrayAdapter;
@@ -27,17 +28,30 @@ import com.appexamen.tl01e1.configuracion.SQLiteConexion;
 import com.appexamen.tl01e1.configuracion.Transacciones;
 
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 
+/**
+ * Actividad principal de la aplicación.
+ * Permite ingresar nuevos contactos o editar contactos existentes.
+ * Maneja la captura de fotos (Cámara/Galería), validación de datos y almacenamiento en SQLite.
+ */
 public class MainActivity extends AppCompatActivity {
 
+    // Constantes para identificar peticiones de cámara, galería y permisos
     private static final int REQUEST_IMAGE_CAPTURE = 1;
+    private static final int REQUEST_IMAGE_GALLERY = 2;
     private static final int PERMISSION_REQUEST_CAMERA = 100;
 
+    // Componentes de la interfaz de usuario
     ImageView imageViewFoto;
     Spinner spinnerPais;
     EditText editTextNombre, editTextTelefono, editTextNota;
     Button btnSalvarContacto, btnContactosSalvados;
+    
+    // Almacena la foto capturada o seleccionada en memoria
     Bitmap imageBitmap;
+    
+    // ID del contacto a actualizar. Si es -1, se considera un nuevo contacto.
     int contactIdToUpdate = -1;
 
     @Override
@@ -45,8 +59,11 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        // Inicialización de componentes vinculándolos con el archivo de diseño XML
         imageViewFoto = findViewById(R.id.imageViewFoto);
-        findViewById(R.id.fabAgregarFoto).setOnClickListener(v -> tomarFoto());
+        
+        // Al presionar el botón de la foto, mostramos el diálogo de opciones
+        findViewById(R.id.fabAgregarFoto).setOnClickListener(v -> mostrarOpcionesImagen());
 
         spinnerPais = findViewById(R.id.spinnerPais);
         editTextNombre = findViewById(R.id.editTextNombre);
@@ -55,11 +72,13 @@ public class MainActivity extends AppCompatActivity {
         btnSalvarContacto = findViewById(R.id.btnSalvarContacto);
         btnContactosSalvados = findViewById(R.id.btnContactosSalvados);
 
+        // Configuración del Spinner (lista desplegable) con los nombres de países
         ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(this,
                 R.array.paises, android.R.layout.simple_spinner_item);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinnerPais.setAdapter(adapter);
 
+        // Lógica para detectar si la actividad se abrió para EDITAR un contacto existente
         Intent intent = getIntent();
         if (intent.hasExtra("id")) {
             contactIdToUpdate = intent.getIntExtra("id", -1);
@@ -94,17 +113,51 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void tomarFoto() {
+    /**
+     * Muestra un diálogo para que el usuario elija entre Cámara o Galería.
+     */
+    private void mostrarOpcionesImagen() {
+        String[] opciones = {"Tomar Foto", "Elegir de Galería", "Cancelar"};
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Seleccionar Imagen");
+        builder.setItems(opciones, (dialog, which) -> {
+            if (which == 0) {
+                comprobarPermisosCamara();
+            } else if (which == 1) {
+                abrirGaleria();
+            } else {
+                dialog.dismiss();
+            }
+        });
+        builder.show();
+    }
+
+    /**
+     * Verifica permisos y lanza la aplicación de cámara.
+     */
+    private void comprobarPermisosCamara() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA},
                     PERMISSION_REQUEST_CAMERA);
         } else {
-            Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-            if (takePictureIntent.resolveActivity(getPackageManager()) != null) {
-                startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAPTURE);
-            }
+            abrirCamara();
         }
+    }
+
+    private void abrirCamara() {
+        Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        if (takePictureIntent.resolveActivity(getPackageManager()) != null) {
+            startActivityForResult(takePictureIntent, REQUEST_IMAGE_CAPTURE);
+        }
+    }
+
+    /**
+     * Abre la galería para seleccionar una imagen.
+     */
+    private void abrirGaleria() {
+        Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+        startActivityForResult(intent, REQUEST_IMAGE_GALLERY);
     }
 
     @Override
@@ -112,41 +165,50 @@ public class MainActivity extends AppCompatActivity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == PERMISSION_REQUEST_CAMERA) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                tomarFoto();
+                abrirCamara();
             } else {
                 Toast.makeText(this, "Permiso de cámara denegado", Toast.LENGTH_SHORT).show();
             }
         }
     }
 
+    /**
+     * Recibe el resultado de la cámara o la galería.
+     */
     @Override
     protected void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQUEST_IMAGE_CAPTURE && resultCode == RESULT_OK) {
-            Bundle extras = data.getExtras();
-            imageBitmap = (Bitmap) extras.get("data");
-            imageViewFoto.setImageBitmap(imageBitmap);
+        if (resultCode == RESULT_OK && data != null) {
+            if (requestCode == REQUEST_IMAGE_CAPTURE) {
+                // Resultado de la cámara
+                Bundle extras = data.getExtras();
+                imageBitmap = (Bitmap) extras.get("data");
+                imageViewFoto.setImageBitmap(imageBitmap);
+            } else if (requestCode == REQUEST_IMAGE_GALLERY) {
+                // Resultado de la galería
+                try {
+                    Uri imageUri = data.getData();
+                    InputStream imageStream = getContentResolver().openInputStream(imageUri);
+                    imageBitmap = BitmapFactory.decodeStream(imageStream);
+                    imageViewFoto.setImageBitmap(imageBitmap);
+                } catch (Exception e) {
+                    Toast.makeText(this, "Error al cargar imagen", Toast.LENGTH_SHORT).show();
+                }
+            }
         }
     }
 
+    /**
+     * Valida los datos e inserta o actualiza el contacto en la base de datos SQLite.
+     */
     private void salvarContacto() {
         String pais = spinnerPais.getSelectedItem().toString();
         String nombre = editTextNombre.getText().toString();
         String telefono = editTextTelefono.getText().toString();
         String nota = editTextNota.getText().toString();
 
-        if (nombre.isEmpty()) {
-            mostrarAlerta("Debe escribir un nombre");
-            return;
-        }
-
-        if (telefono.isEmpty()) {
-            mostrarAlerta("Debe escribir un telefono");
-            return;
-        }
-
-        if (nota.isEmpty()) {
-            mostrarAlerta("Debe escribir una nota");
+        if (nombre.isEmpty() || telefono.isEmpty() || nota.isEmpty()) {
+            mostrarAlerta("Todos los campos son obligatorios");
             return;
         }
 
@@ -167,23 +229,14 @@ public class MainActivity extends AppCompatActivity {
             }
 
             if (contactIdToUpdate != -1) {
-                int rowsAffected = db.update(Transacciones.TABLA_CONTACTOS, valores, Transacciones.COLUMNA_ID + "=?", new String[]{String.valueOf(contactIdToUpdate)});
-                if (rowsAffected > 0) {
-                    Toast.makeText(this, "Contacto actualizado exitosamente", Toast.LENGTH_SHORT).show();
-                    finish(); // Regresa a la lista de contactos
-                } else {
-                    Toast.makeText(this, "Error al actualizar el contacto", Toast.LENGTH_SHORT).show();
-                }
+                db.update(Transacciones.TABLA_CONTACTOS, valores, Transacciones.COLUMNA_ID + "=?", new String[]{String.valueOf(contactIdToUpdate)});
+                Toast.makeText(this, "Contacto actualizado", Toast.LENGTH_SHORT).show();
+                finish();
             } else {
-                long resultado = db.insert(Transacciones.TABLA_CONTACTOS, null, valores);
-                if (resultado != -1) {
-                    Toast.makeText(this, "Contacto salvado exitosamente", Toast.LENGTH_SHORT).show();
-                    limpiarCampos();
-                } else {
-                    Toast.makeText(this, "Error al salvar el contacto", Toast.LENGTH_SHORT).show();
-                }
+                db.insert(Transacciones.TABLA_CONTACTOS, null, valores);
+                Toast.makeText(this, "Contacto guardado", Toast.LENGTH_SHORT).show();
+                limpiarCampos();
             }
-
             db.close();
         } catch (Exception e) {
             Toast.makeText(this, "Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
